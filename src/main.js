@@ -52,7 +52,7 @@ orbitControls.minPolarAngle = Math.PI / 5;   // Can't go too high (36°) — for
 
 // Lock zoom distances (camera cannot drift too far from the car)
 orbitControls.minDistance = 3;
-orbitControls.maxDistance = 8; // Tight chase cam
+orbitControls.maxDistance = 15;
 
 // Disable panning so the car always stays perfectly centered
 orbitControls.enablePan = false;
