@@ -1,6 +1,6 @@
 export class Controls {
     constructor() {
-        this.keys = { forward: false, backward: false, left: false, right: false };
+        this.keys = { forward: false, backward: false, left: false, right: false, nitro: false, respawn: false };
         window.addEventListener('keydown', (e) => this.onKeyDown(e), false);
         window.addEventListener('keyup', (e) => this.onKeyUp(e), false);
     }
@@ -10,6 +10,8 @@ export class Controls {
             case 'ArrowLeft': case 'KeyA': this.keys.left = true; break;
             case 'ArrowDown': case 'KeyS': this.keys.backward = true; break;
             case 'ArrowRight': case 'KeyD': this.keys.right = true; break;
+            case 'KeyN': this.keys.nitro = true; break;
+            case 'KeyR': this.keys.respawn = true; break;
         }
     }
     onKeyUp(event) {
@@ -18,6 +20,8 @@ export class Controls {
             case 'ArrowLeft': case 'KeyA': this.keys.left = false; break;
             case 'ArrowDown': case 'KeyS': this.keys.backward = false; break;
             case 'ArrowRight': case 'KeyD': this.keys.right = false; break;
+            case 'KeyN': this.keys.nitro = false; break;
+            case 'KeyR': this.keys.respawn = false; break;
         }
     }
 }
