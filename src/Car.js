@@ -79,24 +79,8 @@ export class Car {
                     child.castShadow = true;
                     child.receiveShadow = true;
 
-                    // --- Auto-detect Wheels & Steering ---
-                    // This uses common naming conventions from Sketchfab/Blender models.
-                    const name = child.name.toLowerCase();
-                    if (name.includes('wheel') || name.includes('tire') || name.includes('rim')) {
-                        // Is this a front wheel? (Look for 'front', 'f', 'fl', 'fr')
-                        let isFront = false;
-                        if (name.includes('front') || name.includes('_f_') || name.endsWith('_fl') || name.endsWith('_fr') || name.includes('fl') || name.includes('fr')) {
-                            isFront = true;
-                        }
-
-                        this.wheels.push({
-                            spinner: child, // The mesh that rotates forward/backward with speed
-                            isFront: isFront,
-                            baseRotationY: child.rotation.y // Store initial Y rotation to add steering on top
-                        });
-                    }
-
                     // --- Auto-detect Taillights ---
+                    const name = child.name.toLowerCase();
                     if (name.includes('tail') || name.includes('brake') || name.includes('rear_light')) {
                         if (child.material) {
                             // Clone material so we don't accidentally light up other red things
@@ -104,6 +88,36 @@ export class Car {
                             child.material.emissiveIntensity = 0;
                             this.taillights.push(child.material);
                         }
+                    }
+                }
+
+                // --- Auto-detect Wheels & Steering ---
+                // Many models name the parent Group 'Wheel_FL' and the Mesh 'Object_59'
+                const nodeName = child.name.toLowerCase();
+                if (nodeName.includes('wheel') || nodeName.includes('tire') || nodeName.includes('rim')) {
+                    // Prevent adding child meshes if we already got the parent group
+                    let parentIsWheel = false;
+                    let p = child.parent;
+                    while (p) {
+                        const pName = p.name.toLowerCase();
+                        if (pName.includes('wheel') || pName.includes('tire') || pName.includes('rim')) {
+                            parentIsWheel = true;
+                            break;
+                        }
+                        p = p.parent;
+                    }
+
+                    if (!parentIsWheel) {
+                        let isFront = false;
+                        if (nodeName.includes('front') || nodeName.includes('_f_') || nodeName.endsWith('_fl') || nodeName.endsWith('_fr') || nodeName.includes('fl') || nodeName.includes('fr')) {
+                            isFront = true;
+                        }
+
+                        this.wheels.push({
+                            spinner: child, // Rotating group/mesh
+                            isFront: isFront,
+                            baseRotationY: child.rotation.y
+                        });
                     }
                 }
             });
