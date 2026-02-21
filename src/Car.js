@@ -116,7 +116,9 @@ export class Car {
                         this.wheels.push({
                             spinner: child, // Rotating group/mesh
                             isFront: isFront,
-                            baseRotationY: child.rotation.y
+                            baseRotationX: child.rotation.x,
+                            baseRotationY: child.rotation.y,
+                            baseRotationZ: child.rotation.z
                         });
                     }
                 }
@@ -521,13 +523,14 @@ export class Car {
 
         this.wheels.forEach(w => {
             if (w.spinner) {
-                // Spin for speed
-                w.spinner.rotation.x -= rotationAngle; // Changed to minus assuming typical +Z forward models
-
-                // Steer if it's a front wheel
-                if (w.isFront) {
-                    w.spinner.rotation.y = w.baseRotationY + this.steeringAngle;
-                }
+                // To spin forward correctly for this model we need to ADD the rotation.
+                // Reset to base and apply fresh so we don't skew axes.
+                w.baseRotationX += rotationAngle;
+                w.spinner.rotation.set(
+                    w.baseRotationX,
+                    w.isFront ? w.baseRotationY + this.steeringAngle : w.baseRotationY,
+                    w.baseRotationZ
+                );
             }
         });
 
