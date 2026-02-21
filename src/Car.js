@@ -532,6 +532,27 @@ export class Car {
         let isBraking = false;
         let accelerating = false;
 
+        // -- 0. Respawn (R key) — drop from sky --
+        if (this.controls.keys.respawn) {
+            this.controls.keys.respawn = false; // One-shot
+            this.mesh.position.y = 50; // Lift to sky
+            this.speed = 0;
+            this.lateralVelocity = 0;
+            this.steeringAngle = 0;
+        }
+
+        // Gravity — if car is above ground, fall down
+        if (this.mesh.position.y > 0.01) {
+            this.mesh.position.y -= 0.5; // Fall speed
+            if (this.mesh.position.y < 0) this.mesh.position.y = 0;
+        }
+
+        // -- 0b. Nitro (N key) — massive speed boost --
+        if (this.controls.keys.nitro) {
+            this.speed += 0.15; // Huge acceleration burst
+            if (this.speed > this.maxSpeed * 2) this.speed = this.maxSpeed * 2;
+        }
+
         // -- 1. Engine & Torque --
         // Torque decreases at higher speeds (simulating gear ratios/air resistance)
         const currentSpeedRatio = Math.abs(this.speed) / this.maxSpeed;
