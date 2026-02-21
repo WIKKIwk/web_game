@@ -11,7 +11,7 @@ scene.fog = new THREE.Fog(0x87ceeb, 200, 1000);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 // Initial camera position close behind the car
-camera.position.set(0, 8, -5);
+camera.position.set(0, 4, -6);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -39,6 +39,7 @@ const track = new Track(scene);
 const controls = new Controls();
 // Pass the GLTF model path to the Car constructor
 const car = new Car(scene, controls, '/models/mercedes.glb');
+car.track = track; // Connect for collision detection
 const cameraFollow = new CameraFollow(camera, car.mesh, renderer.domElement);
 
 // Add OrbitControls for mouse interaction
