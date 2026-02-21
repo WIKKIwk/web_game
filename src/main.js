@@ -46,10 +46,9 @@ const orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.enableDamping = true; // Gives a nice smooth feeling
 orbitControls.dampingFactor = 0.05;
 
-// Keep the camera elevated (don't let it go below the roof height or under the ground)
-orbitControls.maxPolarAngle = Math.PI / 2.2; // Strictly prevents looking from underneath 
-// Ensure it's never perfectly top down either (optional)
-orbitControls.minPolarAngle = Math.PI / 6;
+// Keep the camera elevated — always looking down at the car
+orbitControls.maxPolarAngle = Math.PI / 3;   // Can't go too low (60°)
+orbitControls.minPolarAngle = Math.PI / 5;   // Can't go too high (36°) — forces a consistent elevated angle
 
 // Lock zoom distances (camera cannot drift too far from the car)
 orbitControls.minDistance = 3;
