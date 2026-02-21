@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export class Car {
-    constructor(scene, controls) {
+    constructor(scene, controls, gltfUrl = null) {
         this.scene = scene;
         this.controls = controls;
 
@@ -27,7 +28,113 @@ export class Car {
         this.currentPitch = 0;
         this.currentRoll = 0;
 
-        this.buildCar();
+        this.mesh = new THREE.Group();
+        this.visuals = new THREE.Group(); // We separate visuals so we can pitch/roll them independently from the physics mesh
+        this.mesh.add(this.visuals);
+        this.scene.add(this.mesh);
+
+        this.wheels = [];
+        this.taillights = []; // Store materials to brighten on braking
+
+        if (gltfUrl) {
+            this.loadGLTFModel(gltfUrl);
+        } else {
+            this.buildProceduralCar();
+        }
+    }
+
+    loadGLTFModel(url) {
+        const loader = new GLTFLoader();
+
+        // Add a temporary placeholder while loading
+        const placeholderGeo = new THREE.BoxGeometry(2, 1, 4);
+        const placeholderMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true });
+        const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
+        placeholder.position.y = 1;
+        this.visuals.add(placeholder);
+
+        loader.load(url, (gltf) => {
+            // Remove placeholder
+            this.visuals.remove(placeholder);
+
+            const model = gltf.scene;
+
+            // Optional: Automatically adjust scale to fit our physics parameters roughly
+            // Usually, games normalize cars to be roughly 4-5 units long.
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const scaleFactor = 4.5 / size.z;
+            model.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+            // Adjust to sit on ground
+            box.setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.y -= box.min.y; // Raise bottom to 0
+            model.position.z -= center.z;  // Center the pivot
+            model.position.x -= center.x;  // Center the pivot
+
+            // Enable shadows
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+
+                    // --- Auto-detect Wheels ---
+                    // This uses common naming conventions from Sketchfab/Blender models.
+                    const name = child.name.toLowerCase();
+                    if (name.includes('wheel') || name.includes('tire') || name.includes('rim')) {
+                        // Instead of modifying the deep hierarchy directly easily, 
+                        // we can wrap it or just track the object itself to spin it.
+                        this.wheels.push({ spinner: child });
+                        // Note: Depending on the GLTF's internal origins (pivots), 
+                        // spinning might wobble if the pivot isn't centered perfectly in the wheel.
+                    }
+
+                    // --- Auto-detect Taillights ---
+                    if (name.includes('tail') || name.includes('brake') || name.includes('rear_light')) {
+                        if (child.material) {
+                            // Clone material so we don't accidentally light up other red things
+                            child.material = child.material.clone();
+                            child.material.emissiveIntensity = 0;
+                            this.taillights.push(child.material);
+                        }
+                    }
+                }
+            });
+
+            this.visuals.add(model);
+
+            // Add Spotlights for custom car too
+            this.addHeadlights();
+
+        }, undefined, (error) => {
+            console.error("Error loading GLTF car:", error);
+            // Fallback
+            this.visuals.remove(placeholder);
+            this.buildProceduralCar();
+        });
+    }
+
+    addHeadlights() {
+        // SpotLights (Mounted roughly front center)
+        const createSpotLight = (x, y, z) => {
+            const spotLight = new THREE.SpotLight(0xffffee, 3.0);
+            spotLight.position.set(x, y, z);
+            spotLight.angle = Math.PI / 4;
+            spotLight.penumbra = 0.5;
+            spotLight.decay = 1.5;
+            spotLight.distance = 150;
+            spotLight.castShadow = true;
+
+            const target = new THREE.Object3D();
+            target.position.set(x, y - 1, z + 10);
+            this.visuals.add(target);
+            spotLight.target = target;
+
+            this.visuals.add(spotLight);
+        };
+        createSpotLight(0.8, 0.9, 2.15);
+        createSpotLight(-0.8, 0.9, 2.15);
     }
 
     // --- Procedural Canvas Textures ---
@@ -96,12 +203,7 @@ export class Car {
         return tex;
     }
 
-    buildCar() {
-        // Container for all visual car parts
-        this.mesh = new THREE.Group();
-        this.visuals = new THREE.Group(); // We separate visuals so we can pitch/roll them independently from the physics mesh
-        this.mesh.add(this.visuals);
-
+    buildProceduralCar() {
         // --- Materials ---
         const stripeTexture = this.createRacingStripesTexture();
         const carPaintMaterial = new THREE.MeshPhysicalMaterial({
@@ -240,9 +342,10 @@ export class Car {
         });
         const headlightHousingMat = new THREE.MeshStandardMaterial({ color: 0x111111 }); // Inner dark housing
 
-        this.taillightMaterial = new THREE.MeshStandardMaterial({
+        const procTaillightMaterial = new THREE.MeshStandardMaterial({
             color: 0x440000, emissive: 0xff0000, emissiveIntensity: 0.0, roughness: 0.2
         });
+        this.taillights.push(procTaillightMaterial);
 
         const makeLight = (x, y, z, mat, isFront) => {
             // Add a housing behind the lens
@@ -261,28 +364,11 @@ export class Car {
         makeLight(0.8, 0.9, 2.15, headlightLensMaterial, true);
         makeLight(-0.8, 0.9, 2.15, headlightLensMaterial, true);
         // Taillights
-        makeLight(0.8, 0.9, -2.15, this.taillightMaterial, false);
-        makeLight(-0.8, 0.9, -2.15, this.taillightMaterial, false);
+        makeLight(0.8, 0.9, -2.15, procTaillightMaterial, false);
+        makeLight(-0.8, 0.9, -2.15, procTaillightMaterial, false);
 
-        // SpotLights (Mounted lower now)
-        const createSpotLight = (x, y, z) => {
-            const spotLight = new THREE.SpotLight(0xffffee, 3.0);
-            spotLight.position.set(x, y, z);
-            spotLight.angle = Math.PI / 4;
-            spotLight.penumbra = 0.5;
-            spotLight.decay = 1.5;
-            spotLight.distance = 150;
-            spotLight.castShadow = true;
+        this.addHeadlights();
 
-            const target = new THREE.Object3D();
-            target.position.set(x, y - 1, z + 10);
-            this.visuals.add(target);
-            spotLight.target = target;
-
-            this.visuals.add(spotLight);
-        };
-        createSpotLight(0.8, 0.9, 2.15);
-        createSpotLight(-0.8, 0.9, 2.15);
 
         // 6. Wheels (Tire + Rim + Brake Disc)
         // INCREASED SEGMENTS FOR PERFECTLY ROUND WHEELS (e.g. 64 segments instead of 12)
@@ -293,8 +379,6 @@ export class Car {
         const discGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.05, 32);
         discGeo.rotateZ(Math.PI / 2);
         const caliperGeo = new THREE.BoxGeometry(0.1, 0.3, 0.15);
-
-        this.wheels = [];
 
         const createWheel = (x, y, z, isRightSide) => {
             const wheelAnchor = new THREE.Group();
@@ -340,8 +424,6 @@ export class Car {
         this.wheelFR = createWheel(-1.25, 0.58, 1.4, true);
         this.wheelBL = createWheel(1.25, 0.58, -1.3, false);
         this.wheelBR = createWheel(-1.25, 0.58, -1.3, true);
-
-        this.scene.add(this.mesh);
     }
 
     update(delta) {
@@ -375,7 +457,9 @@ export class Car {
         this.speed = Math.min(Math.max(this.speed, -this.maxSpeed / 2), this.maxSpeed);
 
         // -- 2. Taillights --
-        this.taillightMaterial.emissiveIntensity = isBraking ? 5.0 : 0.5;
+        this.taillights.forEach(mat => {
+            mat.emissiveIntensity = isBraking ? 5.0 : 0.5;
+        });
 
         // -- 3. Steering & Drifting Kinematics --
         // To turn, we need forward momentum.
@@ -410,16 +494,22 @@ export class Car {
         this.lateralVelocity *= this.grip;
 
         // Visually steer the front wheels (Anchors)
-        // Wheel array indices: 0=FL, 1=FR
-        this.wheels[0].anchor.rotation.y = this.steeringAngle;
-        this.wheels[1].anchor.rotation.y = this.steeringAngle;
+        // Check if we have procedurally generated anchors (which are defined manually)
+        if (this.wheelFL && this.wheelFR) {
+            this.wheelFL.rotation.y = this.steeringAngle;
+            this.wheelFR.rotation.y = this.steeringAngle;
+        }
 
         // -- 4. Wheel Spinning --
         const wheelCircumference = 2 * Math.PI * 0.58;
         const rotationAngle = (this.speed / wheelCircumference) * Math.PI * 2;
 
         this.wheels.forEach(w => {
-            w.spinner.rotation.x += rotationAngle;
+            // Check if the mesh aligns X as the rotation axle
+            // For custom GLTFs it could be different, assuming X for now
+            if (w.spinner) {
+                w.spinner.rotation.x += rotationAngle;
+            }
         });
 
         // -- 5. Weight Transfer (Suspension Visuals) --
