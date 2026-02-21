@@ -506,18 +506,20 @@ export class Car {
         });
 
         // -- 3. Steering & Drifting Kinematics --
-        // To turn, we need forward momentum.
+        // Steering input is always accepted (even stationary) for visual wheel turning.
+        // But the car body only rotates when there is forward/backward momentum.
+        if (this.controls.keys.left) {
+            this.steeringAngle = Math.min(this.steeringAngle + this.turnSpeed, this.maxSteeringAngle);
+        } else if (this.controls.keys.right) {
+            this.steeringAngle = Math.max(this.steeringAngle - this.turnSpeed, -this.maxSteeringAngle);
+        } else {
+            this.steeringAngle *= 0.85; // Faster auto-center
+        }
+
+        // Only rotate the car body if moving
         if (Math.abs(this.speed) > 0.02) {
             let steerFactor = 1;
             if (this.speed < 0) steerFactor = -1;
-
-            if (this.controls.keys.left) {
-                this.steeringAngle = Math.min(this.steeringAngle + this.turnSpeed, this.maxSteeringAngle);
-            } else if (this.controls.keys.right) {
-                this.steeringAngle = Math.max(this.steeringAngle - this.turnSpeed, -this.maxSteeringAngle);
-            } else {
-                this.steeringAngle *= 0.85; // Faster auto-center
-            }
 
             // Apply steering to mesh rotation. 
             // Turning is less sharp at high speeds
@@ -530,8 +532,6 @@ export class Car {
                 // When steering hard at high speeds, add sideways velocity
                 this.lateralVelocity += (this.steeringAngle > 0 ? 0.01 : -0.01) * currentSpeedRatio;
             }
-        } else {
-            this.steeringAngle *= 0.85;
         }
 
         // Recover grip (tires biting into road)
@@ -545,12 +545,12 @@ export class Car {
 
         this.wheels.forEach(w => {
             if (w.spinner) {
-                // To spin forward correctly for this model, we subtract.
+                // Spin wheels forward/backward based on speed
                 w.baseRotationX -= rotationAngle;
                 w.spinner.rotation.set(
                     w.baseRotationX,
-                    w.isFront ? w.baseRotationY + this.steeringAngle : w.baseRotationY,
-                    w.baseRotationZ
+                    w.baseRotationY,
+                    w.isFront ? w.baseRotationZ - this.steeringAngle : w.baseRotationZ
                 );
             }
         });
