@@ -73,78 +73,133 @@ export class Car {
             model.position.z -= center.z;  // Center the pivot
             model.position.x -= center.x;  // Center the pivot
 
-            // Enable shadows
+            // --- Pass 1: Enable shadows and detect taillights ---
             model.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
 
-                    // --- Auto-detect Taillights ---
                     const name = child.name.toLowerCase();
                     if (name.includes('tail') || name.includes('brake') || name.includes('rear_light')) {
                         if (child.material) {
-                            // Clone material so we don't accidentally light up other red things
                             child.material = child.material.clone();
                             child.material.emissiveIntensity = 0;
                             this.taillights.push(child.material);
                         }
                     }
                 }
+            });
 
-                // --- Auto-detect Wheels & Steering ---
-                // Many models name the parent Group 'Wheel_FL' and the Mesh 'Object_59'
+            // --- Pass 2: Collect all wheel/tyre/rim part nodes ---
+            // In this Mercedes model, TYRE and WHEEL are SEPARATE sibling nodes.
+            // We must collect them all, then group nearby ones into "assemblies".
+            const wheelParts = [];
+            model.traverse((child) => {
                 const nodeName = child.name.toLowerCase();
-                if (nodeName.includes('wheel') || nodeName.includes('tire') || nodeName.includes('rim')) {
-                    // Prevent adding child meshes if we already got the parent group
-                    let parentIsWheel = false;
+                // Skip the STEERING_WHEEL (it's the interior steering wheel, not a car wheel!)
+                if (nodeName.includes('steering')) return;
+
+                if (nodeName.includes('wheel') || nodeName.includes('tyre') || nodeName.includes('tire') || nodeName.includes('rim')) {
+                    // Skip if a parent already matched (avoid double-counting)
+                    let parentIsWheelPart = false;
                     let p = child.parent;
                     while (p) {
                         const pName = p.name.toLowerCase();
-                        if (pName.includes('wheel') || pName.includes('tire') || pName.includes('rim')) {
-                            parentIsWheel = true;
-                            break;
+                        if (pName.includes('wheel') || pName.includes('tyre') || pName.includes('tire') || pName.includes('rim')) {
+                            if (!pName.includes('steering')) {
+                                parentIsWheelPart = true;
+                                break;
+                            }
                         }
                         p = p.parent;
                     }
 
-                    if (!parentIsWheel) {
-                        let isFront = false;
-                        if (nodeName.includes('front') || nodeName.includes('_f_') || nodeName.endsWith('_fl') || nodeName.endsWith('_fr') || nodeName.includes('fl') || nodeName.includes('fr')) {
-                            isFront = true;
-                        }
-
-                        this.wheels.push({
-                            spinner: child, // Rotating group/mesh
-                            isFront: false, // We will determine this spatially after traversal
-                            baseRotationX: child.rotation.x,
-                            baseRotationY: child.rotation.y,
-                            baseRotationZ: child.rotation.z
-                        });
+                    if (!parentIsWheelPart) {
+                        const box = new THREE.Box3().setFromObject(child);
+                        const center = box.getCenter(new THREE.Vector3());
+                        wheelParts.push({ node: child, center: center });
                     }
                 }
             });
 
-            // --- Spatial Front-Wheel Detection ---
-            // Because many models don't name wheels "front/rear" explicitly, we sort them by Z position.
-            // Our car moves towards +Z, so front wheels are the ones with the largest Z coordinates.
-            if (this.wheels.length > 0) {
-                // Calculate average Z center of all wheel meshes
-                let totalZ = 0;
-                this.wheels.forEach(w => {
-                    const box = new THREE.Box3().setFromObject(w.spinner);
-                    const center = box.getCenter(new THREE.Vector3());
-                    w.worldZ = center.z; // Store for comparison
-                    totalZ += center.z;
-                });
-                const avgZ = totalZ / this.wheels.length;
+            // --- Pass 3: Group nearby parts into wheel assemblies ---
+            // Parts within ~0.5 units of each other belong to the same wheel assembly.
+            const assemblies = []; // Each assembly = { parts: [...nodes], center: Vector3 }
+            const used = new Set();
 
-                // Mark wheels that are in front of the average Z line as "front" wheels
-                this.wheels.forEach(w => {
-                    if (w.worldZ > avgZ) {
-                        w.isFront = true;
+            for (let i = 0; i < wheelParts.length; i++) {
+                if (used.has(i)) continue;
+                used.add(i);
+
+                const assembly = { parts: [wheelParts[i].node], center: wheelParts[i].center.clone() };
+
+                for (let j = i + 1; j < wheelParts.length; j++) {
+                    if (used.has(j)) continue;
+                    const dist = wheelParts[i].center.distanceTo(wheelParts[j].center);
+                    if (dist < 1.5) { // Close enough = same wheel
+                        assembly.parts.push(wheelParts[j].node);
+                        used.add(j);
                     }
+                }
+
+                assemblies.push(assembly);
+            }
+
+            // --- Pass 4: Determine front/rear by Z position ---
+            if (assemblies.length > 0) {
+                let totalZ = 0;
+                assemblies.forEach(a => { totalZ += a.center.z; });
+                const avgZ = totalZ / assemblies.length;
+
+                assemblies.forEach(a => {
+                    a.isFront = a.center.z > avgZ;
                 });
             }
+
+            // --- Pass 5: Create steering pivot groups for front wheel assemblies ---
+            // For front wheels, we insert a pivot Group between the parent and the wheel parts.
+            // The pivot handles Y-axis steering rotation cleanly.
+            // All parts inside it spin around X for forward/backward rolling.
+            assemblies.forEach(assembly => {
+                if (assembly.isFront) {
+                    // Create a pivot point at the wheel assembly's center
+                    const pivot = new THREE.Group();
+                    pivot.name = 'SteeringPivot';
+
+                    // Set pivot position to the assembly center in parent-local space
+                    const parentNode = assembly.parts[0].parent;
+                    pivot.position.copy(assembly.center);
+
+                    // Add pivot to parent
+                    parentNode.add(pivot);
+
+                    // Reparent each part into the pivot, adjusting positions
+                    assembly.parts.forEach(part => {
+                        const worldPos = new THREE.Vector3();
+                        part.getWorldPosition(worldPos);
+
+                        parentNode.remove(part);
+                        pivot.add(part);
+
+                        // Adjust part position relative to pivot
+                        const pivotWorldPos = new THREE.Vector3();
+                        pivot.getWorldPosition(pivotWorldPos);
+                        part.position.sub(assembly.center);
+                    });
+
+                    this.wheels.push({
+                        parts: assembly.parts,   // All meshes in this assembly (tyre + rim)
+                        steeringPivot: pivot,     // We rotate THIS for steering (Y axis)
+                        isFront: true
+                    });
+                } else {
+                    this.wheels.push({
+                        parts: assembly.parts,
+                        steeringPivot: null,
+                        isFront: false
+                    });
+                }
+            });
 
             this.visuals.add(model);
 
@@ -538,20 +593,24 @@ export class Car {
         this.lateralVelocity *= this.grip;
 
         // Visually steer the front wheels (Anchors)
-        // Check if we have procedurally generated anchors (which are defined manually)
         // -- 4. Wheel Spinning & Custom Steering --
         const wheelCircumference = 2 * Math.PI * 0.58;
         const rotationAngle = (this.speed / wheelCircumference) * Math.PI * 2;
 
         this.wheels.forEach(w => {
-            if (w.spinner) {
-                // Spin wheels forward/backward based on speed
-                w.baseRotationX -= rotationAngle;
-                w.spinner.rotation.set(
-                    w.baseRotationX,
-                    w.baseRotationY,
-                    w.isFront ? w.baseRotationZ - this.steeringAngle : w.baseRotationZ
-                );
+            // Spin ALL parts (tyre + rim) around their local X axis
+            if (w.parts) {
+                w.parts.forEach(part => {
+                    part.rotation.x += rotationAngle;
+                });
+            } else if (w.spinner) {
+                // Procedural car fallback
+                w.spinner.rotation.x += rotationAngle;
+            }
+
+            // Steer front wheels via the pivot group (clean Y-axis rotation)
+            if (w.isFront && w.steeringPivot) {
+                w.steeringPivot.rotation.y = this.steeringAngle;
             }
         });
 
