@@ -547,10 +547,16 @@ export class Car {
             if (this.mesh.position.y < 0) this.mesh.position.y = 0;
         }
 
-        // -- 0b. Nitro (N key) — massive speed boost --
+        // -- 0b. Nitro (N key) — KUCHLI itarish --
         if (this.controls.keys.nitro) {
-            this.speed += 0.15; // Huge acceleration burst
-            if (this.speed > this.maxSpeed * 2) this.speed = this.maxSpeed * 2;
+            this.speed += 0.5; // Juda kuchli tezlanish
+            if (this.speed > this.maxSpeed * 3) this.speed = this.maxSpeed * 3;
+
+            // Fizik itarish — mashinani oldinga surish
+            const boostDir = new THREE.Vector3(0, 0, 1);
+            boostDir.applyQuaternion(this.mesh.quaternion);
+            boostDir.multiplyScalar(2.0); // Har kadrda 2 unit oldinga itaradi
+            this.mesh.position.add(boostDir);
         }
 
         // -- 1. Engine & Torque --
