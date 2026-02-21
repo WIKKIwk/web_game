@@ -10,8 +10,8 @@ scene.background = new THREE.Color(0x87ceeb);
 scene.fog = new THREE.Fog(0x87ceeb, 200, 1000);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-// Initial camera position somewhat behind and above
-camera.position.set(0, 5, -10);
+// Initial camera position higher up and further back for a driving view
+camera.position.set(0, 7, -12);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -45,9 +45,18 @@ const cameraFollow = new CameraFollow(camera, car.mesh, renderer.domElement);
 const orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.enableDamping = true; // Gives a nice smooth feeling
 orbitControls.dampingFactor = 0.05;
-orbitControls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't allow camera to go below ground
-orbitControls.minDistance = 5; // Don't zoom inside the car
-orbitControls.maxDistance = 50; // Don't zoom out too far
+
+// Keep the camera elevated (don't let it go below the roof height or under the ground)
+orbitControls.maxPolarAngle = Math.PI / 2.2; // Strictly prevents looking from underneath 
+// Ensure it's never perfectly top down either (optional)
+orbitControls.minPolarAngle = Math.PI / 6;
+
+// Lock zoom distances (camera cannot drift too far from the car)
+orbitControls.minDistance = 3;
+orbitControls.maxDistance = 15; // Restricted from 50 back down to 15
+
+// Disable panning so the car always stays perfectly centered
+orbitControls.enablePan = false;
 
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;

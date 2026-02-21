@@ -79,15 +79,21 @@ export class Car {
                     child.castShadow = true;
                     child.receiveShadow = true;
 
-                    // --- Auto-detect Wheels ---
+                    // --- Auto-detect Wheels & Steering ---
                     // This uses common naming conventions from Sketchfab/Blender models.
                     const name = child.name.toLowerCase();
                     if (name.includes('wheel') || name.includes('tire') || name.includes('rim')) {
-                        // Instead of modifying the deep hierarchy directly easily, 
-                        // we can wrap it or just track the object itself to spin it.
-                        this.wheels.push({ spinner: child });
-                        // Note: Depending on the GLTF's internal origins (pivots), 
-                        // spinning might wobble if the pivot isn't centered perfectly in the wheel.
+                        // Is this a front wheel? (Look for 'front', 'f', 'fl', 'fr')
+                        let isFront = false;
+                        if (name.includes('front') || name.includes('_f_') || name.endsWith('_fl') || name.endsWith('_fr') || name.includes('fl') || name.includes('fr')) {
+                            isFront = true;
+                        }
+
+                        this.wheels.push({
+                            spinner: child, // The mesh that rotates forward/backward with speed
+                            isFront: isFront,
+                            baseRotationY: child.rotation.y // Store initial Y rotation to add steering on top
+                        });
                     }
 
                     // --- Auto-detect Taillights ---
@@ -495,31 +501,32 @@ export class Car {
 
         // Visually steer the front wheels (Anchors)
         // Check if we have procedurally generated anchors (which are defined manually)
-        if (this.wheelFL && this.wheelFR) {
-            this.wheelFL.rotation.y = this.steeringAngle;
-            this.wheelFR.rotation.y = this.steeringAngle;
-        }
-
-        // -- 4. Wheel Spinning --
+        // -- 4. Wheel Spinning & Custom Steering --
         const wheelCircumference = 2 * Math.PI * 0.58;
         const rotationAngle = (this.speed / wheelCircumference) * Math.PI * 2;
 
         this.wheels.forEach(w => {
-            // Check if the mesh aligns X as the rotation axle
-            // For custom GLTFs it could be different, assuming X for now
             if (w.spinner) {
-                w.spinner.rotation.x += rotationAngle;
+                // Spin for speed
+                w.spinner.rotation.x -= rotationAngle; // Changed to minus assuming typical +Z forward models
+
+                // Steer if it's a front wheel
+                if (w.isFront) {
+                    w.spinner.rotation.y = w.baseRotationY + this.steeringAngle;
+                }
             }
         });
 
         // -- 5. Weight Transfer (Suspension Visuals) --
         // Pitch (Forward/Back)
-        if (isBraking) this.targetPitch = -0.05; // Dive down front
-        else if (accelerating) this.targetPitch = 0.03; // Squat rear
+        // Stiff sports car suspension -> smaller pitch values
+        if (isBraking) this.targetPitch = -0.015; // Dive down front
+        else if (accelerating) this.targetPitch = 0.01; // Squat rear
         else this.targetPitch = 0;
 
         // Roll (Side-to-Side) based on steering and speed
-        this.targetRoll = -(this.steeringAngle * currentSpeedRatio * 0.2);
+        // Less roll for sports cars
+        this.targetRoll = -(this.steeringAngle * currentSpeedRatio * 0.08);
 
         // Smoothly interpolate current pitch/roll to target
         this.currentPitch += (this.targetPitch - this.currentPitch) * 0.1;
