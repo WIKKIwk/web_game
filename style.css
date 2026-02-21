@@ -1,0 +1,48 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background-color: #000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+}
+
+canvas {
+    display: block;
+}
+
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let clicks pass through to canvas */
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 20px;
+}
+
+#speedometer {
+    background: rgba(0, 0, 0, 0.7);
+    padding: 15px 25px;
+    border-radius: 8px;
+    font-size: 24px;
+    font-weight: bold;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    display: inline-block;
+    backdrop-filter: blur(4px);
+    width: fit-content;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#speed-value {
+    color: #00ffcc;
+}
