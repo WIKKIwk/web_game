@@ -1,22 +1,20 @@
 import * as THREE from 'three';
+
 export class CameraFollow {
-    constructor(camera, targetMesh) {
+    constructor(camera, targetMesh, domElement) {
         this.camera = camera;
         this.target = targetMesh;
-        this.offset = new THREE.Vector3(0, 5, -10);
-        this.lookAtOffset = new THREE.Vector3(0, 1, 0);
+        this.domElement = domElement;
     }
-    update() {
-        if (!this.target) return;
+
+    getTargetPosition() {
+        if (!this.target) return new THREE.Vector3(0, 0, 0);
+
         const targetWorldPosition = new THREE.Vector3();
         this.target.getWorldPosition(targetWorldPosition);
-        const offsetRotated = this.offset.clone();
-        offsetRotated.applyQuaternion(this.target.quaternion);
 
-        const idealPosition = targetWorldPosition.clone().add(offsetRotated);
-        this.camera.position.lerp(idealPosition, 0.1);
-
-        const lookAtPosition = targetWorldPosition.clone().add(this.lookAtOffset);
-        this.camera.lookAt(lookAtPosition);
+        // We look slightly above the car's center
+        targetWorldPosition.y += 1.0;
+        return targetWorldPosition;
     }
 }
