@@ -8,10 +8,13 @@ export class Car {
 
         // --- Advanced Physics Parameters ---
         this.speed = 0;
-        this.maxSpeed = 2.0;       // Top theoretical speed
-        this.acceleration = 0.02;  // Base acceleration
-        this.friction = 0.005;     // Rolling resistance
-        this.brakeFriction = 0.04; // Braking power
+        this.maxSpeed = 3.0;       // Top speed (higher for more fun)
+        this.acceleration = 0.025; // Base acceleration (punchier)
+        this.friction = 0.004;     // Rolling resistance
+        this.brakeFriction = 0.06; // Strong braking power
+        this.airResistance = 0.001; // Drag increases with speed squared
+
+        this.track = null; // Set from main.js for collision detection
 
         // Steering
         this.steeringAngle = 0;
@@ -553,7 +556,13 @@ export class Car {
         }
 
         // Clamp Speed
-        this.speed = Math.min(Math.max(this.speed, -this.maxSpeed / 2), this.maxSpeed);
+        this.speed = Math.min(Math.max(this.speed, -this.maxSpeed / 3), this.maxSpeed);
+
+        // Air resistance (increases with speed squared)
+        if (Math.abs(this.speed) > 0.01) {
+            const drag = this.airResistance * this.speed * Math.abs(this.speed);
+            this.speed -= drag;
+        }
 
         // -- 2. Taillights --
         this.taillights.forEach(mat => {
@@ -646,8 +655,22 @@ export class Car {
             rightVector.multiplyScalar(this.lateralVelocity);
 
             // Add forces together
+            const prevPosition = this.mesh.position.clone();
+
             this.mesh.position.add(forwardVector);
             this.mesh.position.add(rightVector);
+
+            // -- 7. Collision Detection --
+            if (this.track && this.track.colliders.length > 0) {
+                const carBox = new THREE.Box3().setFromObject(this.visuals);
+                if (this.track.checkCollision(carBox)) {
+                    // Revert position
+                    this.mesh.position.copy(prevPosition);
+                    // Bounce back slightly
+                    this.speed *= -0.3;
+                    this.lateralVelocity *= 0.2;
+                }
+            }
         }
 
         // Update UI
