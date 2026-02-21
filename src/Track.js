@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 export class Track {
     constructor(scene) {
         this.scene = scene;
+        this.colliders = []; // Store bounding boxes for collision detection
         this.loadCityMap();
     }
 
@@ -17,19 +18,35 @@ export class Track {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
+
+                    // Build collision boxes for solid objects (not ground/roads)
+                    const box = new THREE.Box3().setFromObject(child);
+                    const size = box.getSize(new THREE.Vector3());
+
+                    // Only add as collider if it has some height (not flat ground)
+                    if (size.y > 1.0) {
+                        this.colliders.push(box);
+                    }
                 }
             });
 
-            // Position on ground
             city.position.y = 0;
-
             this.scene.add(city);
-            console.log('City map loaded!');
+            console.log(`City map loaded! ${this.colliders.length} colliders created.`);
         }, undefined, (error) => {
             console.error('Error loading city map:', error);
-            // Fallback to simple ground
             this.buildFallbackTrack();
         });
+    }
+
+    // Check if a bounding box collides with any city object
+    checkCollision(carBox) {
+        for (let i = 0; i < this.colliders.length; i++) {
+            if (carBox.intersectsBox(this.colliders[i])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     buildFallbackTrack() {
