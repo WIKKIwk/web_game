@@ -1,10 +1,38 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 export class Track {
     constructor(scene) {
         this.scene = scene;
-        this.buildTrack();
+        this.loadCityMap();
     }
-    buildTrack() {
+
+    loadCityMap() {
+        const loader = new GLTFLoader();
+
+        loader.load('/models/city.glb', (gltf) => {
+            const city = gltf.scene;
+
+            city.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            // Position on ground
+            city.position.y = 0;
+
+            this.scene.add(city);
+            console.log('City map loaded!');
+        }, undefined, (error) => {
+            console.error('Error loading city map:', error);
+            // Fallback to simple ground
+            this.buildFallbackTrack();
+        });
+    }
+
+    buildFallbackTrack() {
         const planeGeo = new THREE.PlaneGeometry(2000, 2000);
         const planeMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
         const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -15,19 +43,5 @@ export class Track {
         const gridHelper = new THREE.GridHelper(2000, 100, 0x555555, 0x444444);
         gridHelper.position.y = 0.01;
         this.scene.add(gridHelper);
-
-        const boxGeo = new THREE.BoxGeometry(4, 4, 4);
-        const boxMat = new THREE.MeshStandardMaterial({ color: 0xff4444 });
-
-        for (let i = 0; i < 50; i++) {
-            const box = new THREE.Mesh(boxGeo, boxMat);
-            let px = (Math.random() - 0.5) * 400;
-            let pz = (Math.random() - 0.5) * 400;
-            if (Math.abs(px) < 10 && Math.abs(pz) < 10) px += 20;
-            box.position.set(px, 2, pz);
-            box.castShadow = true;
-            box.receiveShadow = true;
-            this.scene.add(box);
-        }
     }
 }
