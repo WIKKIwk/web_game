@@ -115,7 +115,7 @@ export class Car {
 
                         this.wheels.push({
                             spinner: child, // Rotating group/mesh
-                            isFront: isFront,
+                            isFront: false, // We will determine this spatially after traversal
                             baseRotationX: child.rotation.x,
                             baseRotationY: child.rotation.y,
                             baseRotationZ: child.rotation.z
@@ -123,6 +123,28 @@ export class Car {
                     }
                 }
             });
+
+            // --- Spatial Front-Wheel Detection ---
+            // Because many models don't name wheels "front/rear" explicitly, we sort them by Z position.
+            // Our car moves towards +Z, so front wheels are the ones with the largest Z coordinates.
+            if (this.wheels.length > 0) {
+                // Calculate average Z center of all wheel meshes
+                let totalZ = 0;
+                this.wheels.forEach(w => {
+                    const box = new THREE.Box3().setFromObject(w.spinner);
+                    const center = box.getCenter(new THREE.Vector3());
+                    w.worldZ = center.z; // Store for comparison
+                    totalZ += center.z;
+                });
+                const avgZ = totalZ / this.wheels.length;
+
+                // Mark wheels that are in front of the average Z line as "front" wheels
+                this.wheels.forEach(w => {
+                    if (w.worldZ > avgZ) {
+                        w.isFront = true;
+                    }
+                });
+            }
 
             this.visuals.add(model);
 
@@ -437,7 +459,7 @@ export class Car {
             wheelAnchor.position.set(x, y, z);
             this.visuals.add(wheelAnchor);
 
-            this.wheels.push({ anchor: wheelAnchor, spinner: spinningWheel });
+            this.wheels.push({ anchor: wheelAnchor, spinner: spinningWheel, isFront: (z > 0) }); // For procedural, we know front is +Z
             return wheelAnchor;
         };
 
@@ -523,9 +545,8 @@ export class Car {
 
         this.wheels.forEach(w => {
             if (w.spinner) {
-                // To spin forward correctly for this model we need to ADD the rotation.
-                // Reset to base and apply fresh so we don't skew axes.
-                w.baseRotationX += rotationAngle;
+                // To spin forward correctly for this model, we subtract.
+                w.baseRotationX -= rotationAngle;
                 w.spinner.rotation.set(
                     w.baseRotationX,
                     w.isFront ? w.baseRotationY + this.steeringAngle : w.baseRotationY,
