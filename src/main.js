@@ -11,7 +11,7 @@ scene.fog = new THREE.Fog(0x87ceeb, 200, 1000);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 // Initial camera position close behind the car
-camera.position.set(0, 4, -7);
+camera.position.set(0, 5, -5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -53,7 +53,7 @@ orbitControls.minPolarAngle = Math.PI / 6;
 
 // Lock zoom distances (camera cannot drift too far from the car)
 orbitControls.minDistance = 3;
-orbitControls.maxDistance = 10; // Tight chase cam
+orbitControls.maxDistance = 8; // Tight chase cam
 
 // Disable panning so the car always stays perfectly centered
 orbitControls.enablePan = false;
