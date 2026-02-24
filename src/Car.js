@@ -531,6 +531,7 @@ export class Car {
     update(delta) {
         let isBraking = false;
         let accelerating = false;
+        const totalMovement = new THREE.Vector3(0, 0, 0);
 
         // -- 0. Respawn (R key) — drop from sky --
         if (this.controls.keys.respawn) {
@@ -543,8 +544,8 @@ export class Car {
 
         // Gravity — if car is above ground, fall down
         if (this.mesh.position.y > 0.01) {
-            this.mesh.position.y -= 0.5; // Fall speed
-            if (this.mesh.position.y < 0) this.mesh.position.y = 0;
+            const drop = Math.min(0.5, this.mesh.position.y);
+            totalMovement.y -= drop;
         }
 
         // -- 0b. Nitro (N key) — KUCHLI itarish --
@@ -552,11 +553,11 @@ export class Car {
             this.speed += 0.5; // Juda kuchli tezlanish
             if (this.speed > this.maxSpeed * 3) this.speed = this.maxSpeed * 3;
 
-            // Fizik itarish — mashinani oldinga surish
+            // Fizik itarish — harakat vektoriga qo'shish
             const boostDir = new THREE.Vector3(0, 0, 1);
             boostDir.applyQuaternion(this.mesh.quaternion);
             boostDir.multiplyScalar(2.0); // Har kadrda 2 unit oldinga itaradi
-            this.mesh.position.add(boostDir);
+            totalMovement.add(boostDir);
         }
 
         // -- 1. Engine & Torque --
@@ -669,7 +670,7 @@ export class Car {
         this.visuals.rotation.x = this.currentPitch;
         this.visuals.rotation.z = this.currentRoll;
 
-        // -- 6. Apply Final Movement Vectors --
+        // -- 6. Apply Final Movement Vectors with Continuous Collision Detection --
         if (Math.abs(this.speed) > 0 || Math.abs(this.lateralVelocity) > 0) {
             // Forward Vector
             const forwardVector = new THREE.Vector3(0, 0, 1);
@@ -681,21 +682,50 @@ export class Car {
             rightVector.applyQuaternion(this.mesh.quaternion);
             rightVector.multiplyScalar(this.lateralVelocity);
 
-            // Add forces together
-            const prevPosition = this.mesh.position.clone();
+            // Combine forces
+            totalMovement.add(forwardVector);
+            totalMovement.add(rightVector);
+        }
 
-            this.mesh.position.add(forwardVector);
-            this.mesh.position.add(rightVector);
+        if (totalMovement.lengthSq() > 0) {
+            // Anti-Tunneling: divide huge movements into small steps to prevent clipping through walls
+            const STEPS = 5;
+            const stepVector = totalMovement.clone().divideScalar(STEPS);
 
-            // -- 7. Collision Detection --
-            if (this.track && this.track.colliders.length > 0) {
-                const carBox = new THREE.Box3().setFromObject(this.visuals);
-                if (this.track.checkCollision(carBox)) {
-                    // Revert position
-                    this.mesh.position.copy(prevPosition);
-                    // Bounce back slightly
-                    this.speed *= -0.3;
-                    this.lateralVelocity *= 0.2;
+            for (let i = 0; i < STEPS; i++) {
+                const prevPosition = this.mesh.position.clone();
+                this.mesh.position.add(stepVector);
+
+                if (this.track && this.track.colliders.length > 0) {
+                    const carBox = new THREE.Box3().setFromObject(this.visuals);
+                    // Slight padding to avoid pixel-perfect stuck logic
+                    carBox.expandByScalar(-0.1);
+
+                    if (this.track.checkCollision(carBox)) {
+                        // Collision hit! Revert this micro-step
+                        this.mesh.position.copy(prevPosition);
+
+                        const impactSpeed = Math.abs(this.speed) + (this.controls.keys.nitro ? 2.0 : 0);
+
+                        // Realistic Impact Reaction
+                        if (impactSpeed > 0.5) {
+                            this.currentPitch = (Math.random() - 0.5) * 0.8;
+                            this.currentRoll = (Math.random() - 0.5) * 0.8;
+
+                            const deflectionAngle = (Math.random() - 0.5) * impactSpeed * 0.8;
+                            this.mesh.rotation.y += deflectionAngle;
+
+                            this.lateralVelocity += (Math.random() - 0.5) * impactSpeed * 0.8;
+
+                            this.speed *= -0.2; // Bounce back
+                        } else {
+                            this.speed *= -0.4;
+                            this.lateralVelocity *= 0.2;
+                        }
+
+                        // Stop applying further steps this frame if we hit a wall
+                        break;
+                    }
                 }
             }
         }
